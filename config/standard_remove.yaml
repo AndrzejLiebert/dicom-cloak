@@ -1,0 +1,149 @@
+# Standard (non-private) attributes for breast MRI de-identification: explicit REMOVAL list.
+# In allowlist mode (default, see standard_keep.yaml) this list is a second line of defence: an
+# attribute may not be in both lists, and the verifier/checker still flag any of these if present.
+# Applied recursively: at the top level AND inside every sequence item.
+#
+# Besides this explicit list, the engine applies VR-based rules everywhere (they catch attributes
+# nobody listed):
+#   PN  -> removed (except top-level PatientName, which is set to the pseudonym)
+#   DA, TM, AE -> removed
+#   DT  -> truncated to the year (YYYY)
+#   UI  -> instance UIDs remapped to 2.25.<HMAC>, consistently within a run (keeps references and a
+#          shared FrameOfReferenceUID valid); class/coding-scheme UIDs (1.2.840.10008.*, CodingSchemeUID,
+#          SOPClassUID, ...) untouched
+#   private tags -> removed unless whitelisted in vendor_private.yaml
+#   overlays (60xx), curves, IconImageSequence -> removed
+
+remove:
+  patient_identity:
+    - OtherPatientIDs                 # national ID numbers often end up here
+    - OtherPatientIDsSequence         # nested hospital IDs + issuer
+    - OtherPatientNames
+    - IssuerOfPatientID
+    - IssuerOfPatientIDQualifiersSequence
+    - TypeOfPatientID
+    - PatientBirthName
+    - PatientMotherBirthName
+    - PatientBirthDate
+    - PatientBirthTime
+    - PatientAddress
+    - PatientTelephoneNumbers
+    - PatientTelecomInformation
+    - ReferencedPatientSequence
+    - ReferencedPatientPhotoSequence
+    - MedicalRecordLocator
+  patient_characteristics:            # age is replaced by an age group, sex is kept
+    - PatientAge
+    - PatientSize
+    - PatientWeight
+    - EthnicGroup
+    - Occupation
+    - MilitaryRank
+    - BranchOfService
+    - PatientReligiousPreference
+    - SmokingStatus
+    - PregnancyStatus
+    - MedicalAlerts
+    - Allergies
+    - AdditionalPatientHistory
+    - PatientComments
+    - PatientState
+  visit_and_location:
+    - AdmissionID
+    - IssuerOfAdmissionIDSequence
+    - CurrentPatientLocation          # ward / room
+    - PatientInstitutionResidence
+  institution_device_staff:
+    - InstitutionName
+    - InstitutionAddress
+    - InstitutionalDepartmentName
+    - InstitutionCodeSequence
+    - InstitutionalDepartmentTypeCodeSequence
+    - StationName
+    - DeviceSerialNumber
+    - DeviceUID
+    - ReferringPhysicianAddress
+    - ReferringPhysicianTelephoneNumbers
+    - ReferringPhysicianIdentificationSequence
+    - PhysiciansOfRecordIdentificationSequence
+    - PerformingPhysicianIdentificationSequence   # also nests the institution address
+    - PhysiciansReadingStudyIdentificationSequence
+    - OperatorIdentificationSequence
+    - RequestingPhysicianIdentificationSequence
+    - ContentCreatorIdentificationCodeSequence
+    # (all *Name person fields are PN and fall under the PN rule)
+  request_and_procedure:
+    - AccessionNumber
+    - IssuerOfAccessionNumberSequence
+    - StudyID
+    - RequestAttributesSequence       # nests accession, order numbers, physician, diagnosis, original Study UID
+    - RequestedProcedureID
+    - RequestedProcedureDescription
+    - RequestedProcedureCodeSequence
+    - RequestedProcedurePriority
+    - ScheduledProcedureStepID
+    - ScheduledProcedureStepDescription
+    - ScheduledProtocolCodeSequence
+    - PerformedProcedureStepID
+    - PerformedProcedureStepDescription
+    - PerformedProtocolCodeSequence
+    - PerformedProcedureTypeDescription
+    - ProcedureCodeSequence
+    - PlacerOrderNumberImagingServiceRequest
+    - FillerOrderNumberImagingServiceRequest
+    - IssueDateOfImagingServiceRequest
+    - IssueTimeOfImagingServiceRequest
+    - OrderEnteredBy
+    - OrderEntererLocation
+    - OrderCallbackPhoneNumber
+    - RequestingService
+    - RequestingServiceCodeSequence
+    - ReasonForStudy                  # ICD code + diagnosis free text
+    - ReasonForTheRequestedProcedure
+    - ReasonForRequestedProcedureCodeSequence
+  references_to_original_objects:     # carry original (pre-anonymization) UIDs
+    - ReferencedStudySequence
+    - ReferencedPerformedProcedureStepSequence
+    - RelatedSeriesSequence
+    - ReferencedImageEvidenceSequence
+    - SourceImageEvidenceSequence
+    - ConversionSourceAttributesSequence   # vendor multi-frame -> classic split images
+    - CurrentRequestedProcedureEvidenceSequence
+    - PertinentOtherEvidenceSequence
+    - ReferencedPresentationStateSequence
+  history_and_free_text:
+    - OriginalAttributesSequence      # modification history: ModifyingSystem holds '<station> / <serial>', old values
+    - ModifyingSystem
+    - SourceOfPreviousValues
+    - StudyComments
+    - AcquisitionComments
+    - ImageComments
+    - InterpretationText
+    - TextComments
+    - TimezoneOffsetFromUTC
+    - IconImageSequence
+  rewritten_by_engine:                # stripped, then written with the engine's own values
+    - PatientIdentityRemoved          # -> YES
+    - DeidentificationMethod
+    - DeidentificationMethodCodeSequence
+    - LongitudinalTemporalInformationModified   # -> MODIFIED
+
+keep_for_research:                    # deliberately retained
+  - PatientSex
+  - StudyDescription
+  - SeriesDescription
+  - ProtocolName
+  - SequenceName                      # Siemens: encodes b-values when private headers are missing
+  - ContrastBolusAgent
+  - Manufacturer
+  - ManufacturerModelName
+  - SoftwareVersions
+  - MagneticFieldStrength
+  - all acquisition/geometry/scaling attributes (groups 0018, 0020, 0028 except those listed above)
+
+sop_classes:
+  keep: ["1.2.840.10008.5.1.4.1.1.4", "1.2.840.10008.5.1.4.1.1.4.1"]   # MR, Enhanced MR
+  drop_note: >
+    Enhanced SR (vendor protocol reports), presentation states, key-object-selection documents
+    (rejection notes: also drop the instances they reference), secondary captures / screenshots
+    (burned-in text), and anything non-DICOM such as viewer databases with thumbnails.

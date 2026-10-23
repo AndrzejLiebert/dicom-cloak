@@ -1,0 +1,327 @@
+# Vendor private-tag policy for breast MRI de-identification (ALLOWLIST).
+#
+# Default: ALL private elements are removed. Only the elements listed under `keep` survive, matched by
+# (group, private creator, element byte); the block byte (xx in gggg,xxEE) is assigned per file by the
+# creator. The engine keeps the original element numbers, which matters because dcm2niix reads several
+# private tags at fixed numbers (e.g. 0043,1039 assumes the creator sits in block 0x10).
+#
+# Kept values still go through the generic rules (no PN/DA/TM, DT -> year, UIDs remapped; inside kept
+# private SEQUENCES the standard allowlist applies too) and through the per-study byte search for
+# original identifiers. Compressed/opaque blobs whose content cannot be byte-checked are never kept.
+#
+# SOURCE: element list taken from dcm2niix source console/nii_dicom.cpp (github.com/rordenlab/dcm2niix,
+# commit 8282dbf, 2026-07-24): the private tags dcm2niix reads, restricted to acquisition, diffusion,
+# timing, geometry and scaling. Creators confirmed on real data for GE (Signa HDxt and other GE MR in
+# a public trial collection), Philips (Achieva, two software generations) and Siemens (VB-era, without
+# CSA). Siemens XA/XB creators ('SIEMENS MR SDS 01' / 'SDI 02' / 'SDR 01') confirmed on an original Vida XB10 export.
+# Re-check against a newer dcm2niix release when upgrading it.
+#
+# SOURCES 2 and 3 (entries marked `src:`): published safe-private lists, restricted to MR acquisition
+# parameters with numeric or CS values (no free text, no CT/X-ray/presentation tags):
+#   - TCIA private tag knowledge base (UAMS Posda, github.com/UAMS-DBMI/PosdaTools,
+#     posda/posdatools/migrations/private_tag_kb/data.sql, table pt, consensus disposition K or KB);
+#   - DICOM PS3.15 Table E.3.10-1 "Safe Private Attributes" (dicom.nema.org, current edition).
+# Cross-check (2026-10-23): TCIA and RSNA CTP mark the Siemens CSA headers X (remove) and several GE
+# diffusion fields R (review). They are kept here because dcm2niix needs them: the CSA series header
+# and the XA protocol only after the ASCCONV scrubber, everything byte-checked. CTP's bundled
+# PrivateTagDictionary.xml ("keep safe private elements") has no Siemens/Philips MR entries coded K,
+# so that switch alone would lose b-values and Philips scaling: the CTP target uses THIS list instead.
+# Creator strings are matched case-insensitively here; the CTP script lists the spelling variants
+# (CTP compares creators exactly).
+
+siemens:
+  keep:
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x0A, name: NumberOfImagesInMosaic, why: mosaic unpacking}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x0B, name: SliceMeasurementDuration, why: timing}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x0C, name: B_value, why: DWI b-value}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x0D, name: DiffusionDirectionality, why: DWI}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x0E, name: DiffusionGradientDirection, why: DWI bvec}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x14, name: ImaRelTablePosition, why: table position}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x18, name: DwellTime, why: readout timing}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x27, name: B_matrix, why: DWI}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x28, name: BandwidthPerPixelPhaseEncode, why: distortion correction}
+    - {group: 0x0019, creator: "SIEMENS MR HEADER", element: 0x29, name: MosaicRefAcqTimes, why: slice timing}
+    - {group: 0x0029, creator: "SIEMENS CSA HEADER", element: 0x08, name: CSAImageHeaderType, why: CSA parsing}
+    - {group: 0x0029, creator: "SIEMENS CSA HEADER", element: 0x09, name: CSAImageHeaderVersion, why: CSA parsing}
+    - {group: 0x0029, creator: "SIEMENS CSA HEADER", element: 0x10, name: CSAImageHeaderInfo, why: "b-value, bvec, slice times, phase-encode polarity"}
+    - {group: 0x0029, creator: "SIEMENS CSA HEADER", element: 0x18, name: CSASeriesHeaderType, why: CSA parsing}
+    - {group: 0x0029, creator: "SIEMENS CSA HEADER", element: 0x19, name: CSASeriesHeaderVersion, why: CSA parsing}
+    - {group: 0x0029, creator: "SIEMENS CSA HEADER", element: 0x20, name: CSASeriesHeaderInfo, scrub: siemens_csa_series, why: "rebuilt with only MrPhoenixProtocol, ASCCONV allowlist-filtered (scrub.py)"}
+    - {group: 0x0051, creator: "SIEMENS MR HEADER", element: 0x0B, name: AcquisitionMatrixText, why: matrix}
+    - {group: 0x0051, creator: "SIEMENS MR HEADER", element: 0x0E, name: ImageOrientationText, why: geometry}
+    - {group: 0x0051, creator: "SIEMENS MR HEADER", element: 0x0F, name: CoilString, why: coil info}
+    - {group: 0x0051, creator: "SIEMENS MR HEADER", element: 0x11, name: ImaPATModeText, why: "acceleration factor (without it dcm2niix falls back to a wrong ParallelReductionFactorInPlane on XA/XB)"}
+    - {group: 0x0051, creator: "SIEMENS MR HEADER", element: 0x13, name: PositivePCSDirections, why: geometry}
+    # Siemens XA (enhanced / MFSPLIT) - creators to be confirmed on XA data
+    - {group: 0x0021, creator: "SIEMENS MR SDS 01", element: 0x05, name: RelTablePosition, why: table position}
+    - {group: 0x0021, creator: "SIEMENS MR SDS 01", element: 0x09, name: PATModeText, why: parallel imaging}
+    - {group: 0x0021, creator: "SIEMENS MR SDS 01", element: 0x5A, name: ScanningSequenceSiemens, why: sequence type}
+    - {group: 0x0021, creator: "SIEMENS MR SDS 01", element: 0x5B, name: SequenceVariantSiemens, why: sequence type}
+    - {group: 0x0021, creator: "SIEMENS MR SDS 01", element: 0x5C, name: ScanOptionsSiemens, why: sequence type}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x04, name: TimeAfterStart, why: timing}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x06, name: ICE_dims, why: volume assembly}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x1C, name: PhaseEncodingDirectionPositive, why: PE polarity}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x42, name: RealDwellTime, why: readout timing}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x4F, name: CoilElements, why: coil info}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x53, name: BandwidthPerPixelPhaseEncode21, why: distortion correction}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x58, name: AcquisitionMatrixText21, why: matrix}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x75, name: ImageTypeText, why: image type}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x76, name: DeepLearningText, why: reconstruction}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0xFE, name: XAPerFrameSequence, why: "Enhanced MR per-frame private container (slice times, bandwidth, ICE dims); only listed elements survive inside"}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x8A, name: FrameNumberInSeries, why: volume assembly}
+    - {group: 0x0021, creator: "SIEMENS MR SDI 02", element: 0x8E, name: ICE_dimsLong, why: volume assembly}
+    - {group: 0x0021, creator: "SIEMENS MR SDS 01", element: 0x19, name: CSASeriesHeaderInfoXA, scrub: siemens_ascconv, why: "XA/XB protocol: raw blob holds serial, exam date, original UIDs -> only the ASCCONV block, allowlist-filtered (scrub.py), is kept"}
+    - {group: 0x0021, creator: "SIEMENS MR SDS 01", element: 0xFE, name: XAEnhancedProtocolSequence, why: "Enhanced MR: private sequence (in SharedFunctionalGroupsSequence) holding the scrubbed protocol"}
+  notes:
+    - "XA/XB (Vida, Terra.X) and VB-VE CSA series header: the raw protocol carries the device serial, the exam date (tReferenceImageN UIDs) and free text; kept only after the ASCCONV allowlist scrubber (scrub.py), then byte-checked."
+    - "If CSA headers were stripped upstream, SequenceName (e.g. '*re_b800t', '*ep_b50_1000') still encodes the b-value per file."
+    - "Original Siemens instance/frame-of-reference UIDs (root 1.3.12.2.1107.5.2...) embed the device serial number and a timestamp: always remap."
+
+philips:
+  keep:
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x01, name: ChemicalShift, why: dixon/fat-water}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x03, name: DiffusionBFactor, why: DWI b-value}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x04, name: DiffusionDirection, why: DWI}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x08, name: PhaseNumber, why: DCE phase index}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x0A, name: SliceNumberMR, why: slice ordering}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x0B, name: SliceOrientation, why: geometry}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x10, name: CardiacSync, why: sequence info}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x13, name: EPIFactor, why: DWI/EPI}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x17, name: NumberOfPhasesMR, why: DCE phase count}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x18, name: NumberOfSlicesMR, why: volume assembly}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x19, name: PartialMatrixScanned, why: k-space}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x1B, name: PrepulseDelay, why: "inversion time (dcm2niix InversionTime)"}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x1C, name: PrepulseType, why: sequence info}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x1F, name: RespirationSync, why: sequence info}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x22, name: WaterFatShift, why: distortion}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x81, name: NumberOfDynamicScans, why: DCE phase count}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x0D, name: ScaleIntercept, why: "precise (float) intensity: quantitative DCE"}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x0E, name: ScaleSlope, why: "precise (float) intensity: quantitative DCE"}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x30, name: TRArray, why: repetition times}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x63, name: MRfMRIStatusIndication, why: dynamic series info}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x6F, name: MRAcquisitionTypePhilips, why: "2D/3D (often missing from the standard attribute)"}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x71, name: MRStackAngulationAP, why: geometry}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x72, name: MRStackAngulationFH, why: geometry}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x73, name: MRStackAngulationRL, why: geometry}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x78, name: MRStackOffcentreAP, why: geometry}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x79, name: MRStackOffcentreFH, why: geometry}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x7A, name: MRStackOffcentreRL, why: geometry}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0xA0, name: MRImageDynamicScanBeginTime, why: "per-dynamic time (seconds, relative)"}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0xB0, name: DiffusionDirectionRL, why: DWI bvec}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0xB1, name: DiffusionDirectionAP, why: DWI bvec}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0xB2, name: DiffusionDirectionFH, why: DWI bvec}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 005", element: 0x0F, name: PrivatePerFrameSq, why: "per-frame values read by dcm2niix; standard allowlist + date/name rules applied inside"}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 005", element: 0x12, name: MRImageDiffBValueNumber, why: DWI}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 005", element: 0x13, name: MRImageGradientOrientationNumber, why: DWI}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 005", element: 0x29, name: MRImageLabelType, why: ASL label/control}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 005", element: 0x3C, name: MRStackTablePosLong, why: table position}
+    # --- added from published safe-private lists (numeric or CS values only; no free text):
+    #     TCIA private tag knowledge base (Posda private_tag_kb, consensus disposition K/KB) and
+    #     DICOM PS3.15 Table E.3.10-1 (Safe Private Attributes). src: tcia-K / tcia-KB / ps3.15
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x02, name: ChemicalShiftNumberMR, why: "IS dixon/fat-water index", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x09, name: ImagePrepulseDelay, why: "FL inversion/prepulse delay (image level)", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x0E, name: CardiacCycled, why: "CS sequence info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x0F, name: CardiacGateWidth, why: "SS sequence info", src: tcia-K}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x11, name: DiffusionEchoTime, why: "FL DWI", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x12, name: DynamicSeries, why: "CS DCE flag", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x14, name: NumberOfEchoes, why: "SL multi-echo", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x15, name: NumberOfLocations, why: "SS volume assembly", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x16, name: NumberOfPCDirections, why: "SS phase contrast", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x1A, name: PCVelocity, why: "FL phase contrast", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x21, name: SelPartInversionRecovery, why: "CS sequence info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x23, name: FlipAnglePhilips, why: "DS flip angle", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x2D, name: StackNumberOfSlices, why: "SS volume assembly", src: tcia-K}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x32, name: StackRadialAngle, why: "FL geometry", src: tcia-K}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x33, name: StackRadialAxis, why: "CS geometry", src: tcia-K}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x35, name: StackSliceNumber, why: "SS slice ordering", src: tcia-K}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x36, name: StackType, why: "CS geometry", src: tcia-K}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x60, name: NumberOfStacks, why: "SL volume assembly", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x7B, name: SeriesAcquisitionNumber, why: "IS series info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x82, name: EchoTrainLengthPhilips, why: "IS sequence info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x83, name: ImagingFrequencyPhilips, why: "DS sequence info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x84, name: InversionTimePhilips, why: "DS sequence info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x85, name: MagneticFieldStrengthPhilips, why: "DS sequence info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x86, name: NumberOfPhaseEncodingSteps, why: "IS k-space", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x88, name: NumberOfAveragesPhilips, why: "DS sequence info", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x89, name: PercentPhaseFieldOfView, why: "DS k-space", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0x8A, name: PercentSampling, why: "DS k-space", src: ps3.15}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0xF1, name: ProspectiveMotionCorrection, why: "FL motion correction", src: tcia-KB}
+    - {group: 0x2001, creator: "Philips Imaging DD 001", element: 0xF2, name: RetrospectiveMotionCorrection, why: "FL motion correction", src: tcia-KB}
+    - {group: 0x2005, creator: "Philips MR Imaging DD 001", element: 0x20, name: NumberOfChemicalShifts, why: "SL dixon", src: tcia-KB}
+  notes:
+    - "Philips classic DCE keeps all dynamics in ONE series; AcquisitionTime may repeat the series start: per-dynamic time is in FrameAcquisitionDateTime / ContentTime / (2005,10A0)."
+    - "Losing ScaleSlope/ScaleIntercept silently changes DCE intensities: never strip them for quantitative work."
+    - "MRAcquisitionType may be empty in the standard attribute and present only in (2005,106F)."
+
+ge:
+  keep:
+    - {group: 0x0009, creator: "GEMS_IDEN_01", element: 0x3A, name: InjectedVolume, why: contrast volume}
+    - {group: 0x0009, creator: "GEMS_IDEN_01", element: 0x8F, name: ReconFilterSize, why: reconstruction}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x17, name: SeriesPlane, why: geometry}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x1B, name: LastScanLoc, why: slice order}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x5A, name: AcquisitionDurationGE, why: timing}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x7F, name: TableDelta, why: table position}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x9C, name: PulseSequenceName, why: "epi/epiRT detection"}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x9E, name: InternalPulseSequenceName, why: "EPI/EPI2: dcm2niix accepts GE b-values ONLY for EPI2"}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xA2, name: RawDataRunNumber, why: multi-echo sorting}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xA9, name: MaxEchoNum, why: multi-echo}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xB2, name: UserData11, why: diffusion tensor file / cycling}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xB3, name: UserData12, why: diffusion cycling / pepolar}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xB6, name: UserData15, why: diffusion derating}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xBB, name: UserData20, why: DWI gradient x}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xBC, name: UserData21, why: DWI gradient y}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xBD, name: UserData22, why: DWI gradient z}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xDF, name: NumberOfDiffusionT2, why: DWI}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xE0, name: NumberOfDiffusionDirection, why: DWI}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xE2, name: VelocityEncodeScale, why: phase contrast}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x4F, name: LocationsInAcquisition, why: volume assembly}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x5A, name: DiffusionDirectionSL, why: DWI}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x5E, name: RTIA_timer, why: slice timing}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x60, name: NumberOfPointsPerArm, why: non-Cartesian}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x61, name: NumberOfArms, why: non-Cartesian}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x62, name: NumberOfExcitations, why: averages}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x02, name: ShimGradientX, why: shim}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x03, name: ShimGradientY, why: shim}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x04, name: ShimGradientZ, why: shim}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x2A, name: UserDefineData, why: "PE polarity etc. (binary; byte-checked)"}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x2C, name: EffectiveEchoSpacing, why: distortion correction}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x2F, name: RawDataType, why: "image type (magnitude/phase/real/imag)"}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x30, name: VasCollapseFlag, why: image type}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x39, name: SlopInt6to9, why: "DWI b-value (first value, may carry a 1e9 offset)"}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x7C, name: EpiRTGroupDelay, why: "epiRT detection, slice timing"}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x83, name: AssetRFactors, why: parallel imaging factor}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x95, name: PrescanReuseString, why: prescan}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xA3, name: ASLContrastTechnique, why: ASL}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xA4, name: ASLLabelingTechnique, why: ASL}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xA5, name: DurationLabelPulse, why: ASL}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xB2, name: MRTablePositionInformation, why: table position}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xB6, name: MultiBand, why: acceleration}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xB7, name: CompressedSensingParameters, why: acceleration}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xCA, name: DeepLearningParameters, why: reconstruction}
+    # --- added from published safe-private lists (numeric or CS values only; no free text):
+    #     TCIA private tag knowledge base (Posda private_tag_kb, consensus disposition K/KB) and
+    #     DICOM PS3.15 Table E.3.10-1 (Safe Private Attributes). src: tcia-K / tcia-KB / ps3.15
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x11, name: SeriesContrast, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x12, name: LastPseq, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x7D, name: SecondEcho, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x7E, name: NumberOfEchos, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x81, name: Contiguous, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x84, name: PeakSAR, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x85, name: MonitorSAR, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x87, name: CardiacRepetitionTime, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x88, name: ImagesPerCardiacCycle, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x8A, name: ActualReceiveGainAnalog, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x8B, name: ActualReceiveGainDigital, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x8D, name: DelayAfterTrigger, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x8F, name: SwapPhaseFrequency, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x90, name: PauseInterval, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x91, name: PulseTime, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x92, name: SliceOffsetOnFrequencyAxis, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x93, name: CenterFrequency, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x94, name: TransmitGain, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x95, name: AnalogReceiverGain, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x96, name: DigitalReceiverGain, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x97, name: BitmapDefiningCVs, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x98, name: CenterFrequencyMethod, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x9B, name: PulseSequenceMode, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0x9F, name: TransmittingCoilGE, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xA0, name: SurfaceCoilType, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xA1, name: ExtremityCoilFlag, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xA3, name: CalibratedFieldStrength, why: "UL acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xA4, name: SATFatWaterBone, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xA5, name: ReceiveBandwidth, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC0, name: SaturationPlanes, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC1, name: SurfaceCoilIntensityCorrectionFlag, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC2, name: SATLocationR, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC3, name: SATLocationL, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC4, name: SATLocationA, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC5, name: SATLocationP, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC6, name: SATLocationH, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC7, name: SATLocationF, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC8, name: SATThicknessRL, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xC9, name: SATThicknessAP, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xCA, name: SATThicknessHF, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xCB, name: PrescribedFlowAxis, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xCC, name: VelocityEncoding, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xCE, name: PrescanType, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xCF, name: PrescanStatus, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xD5, name: FractionalEcho, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xD6, name: PrepPulse, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xD7, name: CardiacPhases, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xD8, name: VariableEchoFlag, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xF2, name: FastPhases, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0019, creator: "GEMS_ACQU_01", element: 0xF9, name: TransmissionGain, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x50, name: GraphicallyPrescribed, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x51, name: RotationFromSourceXRot, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x52, name: RotationFromSourceYRot, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x53, name: RotationFromSourceZRot, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x56, name: IntegerSlop56, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x57, name: IntegerSlop57, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x58, name: IntegerSlop58, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x59, name: IntegerSlop59, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x5B, name: FloatSlop5B, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x5C, name: FloatSlop5C, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x5D, name: FloatSlop5D, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0021, creator: "GEMS_RELA_01", element: 0x5F, name: FloatSlop5F, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0025, creator: "GEMS_SERS_01", element: 0x06, name: LastPulseSequenceUsed, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0025, creator: "GEMS_SERS_01", element: 0x07, name: ImagesInSeries, why: "SL acquisition parameter", src: ps3.15+tcia}
+    - {group: 0x0025, creator: "GEMS_SERS_01", element: 0x11, name: NumberOfAcquisitions, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x31, name: ImagingMode, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x32, name: PulseSequenceGE, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x33, name: ImagingOptions, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x35, name: PlaneType, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x36, name: ObliquePlane, why: "SL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x41, name: ImageLocation, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x42, name: CenterRCoordOfPlaneImage, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x43, name: CenterACoordOfPlaneImage, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x44, name: CenterSCoordOfPlaneImage, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x45, name: NormalRCoord, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x46, name: NormalACoord, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x47, name: NormalSCoord, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x48, name: RCoordOfTopRightCorner, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x49, name: ACoordOfTopRightCorner, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x4A, name: SCoordOfTopRightCorner, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x4B, name: RCoordOfBottomRightCorner, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x4C, name: ACoordOfBottomRightCorner, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x4D, name: SCoordOfBottomRightCorner, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x50, name: TableStartLocation, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0027, creator: "GEMS_IMAG_01", element: 0x51, name: TableEndLocation, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x01, name: BitmapOfPrescanOptions, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x05, name: ImageIsOriginalOrUnoriginal, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x06, name: NumberOfEPIShots, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x07, name: ViewsPerSegment, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x08, name: RespiratoryRateInBPM, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x09, name: RespiratoryTriggerPoint, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x0A, name: TypeOfReceiverUsed, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x0B, name: PeakRateOfChangeOfGradientField, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x0C, name: LimitsInUnitsOfPercent, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x0D, name: PSDEstimatedLimit, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x0E, name: PSDEstimatedLimitInTeslaPerSecond, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x0F, name: SARAvgHead, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x32, name: RawDataType32, why: "SS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x33, name: NegScanSpacing, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x34, name: OffsetFrequency, why: "IS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x35, name: UserUsageTag, why: "UL acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x36, name: UserFillMapMSW, why: "UL acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x37, name: UserFillMapLSW, why: "UL acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x38, name: User25ToUser48, why: "FL acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x6F, name: ScannerTableEntryGradientCoil, why: "DS acquisition parameter", src: ps3.15+tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x73, name: ExperimentType, why: "US acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x74, name: NumberOfRestVolumes, why: "US acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x75, name: NumberOfActiveVolumes, why: "US acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x76, name: NumberOfDummyScans, why: "US acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x79, name: SlicesPerVolume, why: "US acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x7A, name: ExpectedTimePoints, why: "US acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x7D, name: ReconModeFlagWord, why: "US acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x91, name: SARValue, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x9A, name: RxStackIdentification, why: "IS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0x9B, name: NPWFactor, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xA6, name: OffsetFrequencyFastB1map, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xA7, name: MotionEncodingFactor, why: "DS acquisition parameter", src: tcia}
+    - {group: 0x0043, creator: "GEMS_PARM_01", element: 0xA8, name: DualDriveMode, why: "DS acquisition parameter", src: tcia}
+  remove_explicitly:
+    - {group: 0x0025, creator: "GEMS_SERS_01", element: 0x1B, why: "ProtocolDataBlock: compressed blob (free text inside cannot be byte-checked)"}
+  notes:
+    - "GE diffusion: dcm2niix discards b-values unless InternalPulseSequenceName (0019,109E) = EPI2 or the pulse sequence marks EPI2."
+    - "GE DCE (e.g. DISCO/VIBRANT): phases are ordered by TemporalPositionIdentifier and TriggerTime (ms) within a series; keep both."
+    - "Other elements of GEMS_IDEN_01 / GEMS_STDY_01 / GEMS_SERS_01 carry dates, equipment UIDs and suite IDs: not kept."

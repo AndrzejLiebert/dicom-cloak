@@ -1,0 +1,47 @@
+# dicom-cloak configuration (paths relative to this file)
+# mode: allowlist = keep only attributes in standard_keep.yaml (default, recommended);
+#       blocklist = remove standard_remove.yaml + VR rules, keep the rest (legacy).
+# In both modes standard_remove.yaml is enforced and checked as a second line of defence.
+mode: allowlist
+standard_keep: standard_keep.yaml
+standard_remove: standard_remove.yaml
+vendor_private: vendor_private.yaml
+vendors: [siemens, philips, ge]
+
+output_private_group: 0x0011
+output_private_creator: "DICOM CLOAK 1.0"   # holds age group, role, seconds after reference, series-name tags
+
+# Relative clock: AcquisitionTime/ContentTime are rewritten as <relative_clock> + exact offset from the
+# study's first acquisition (real time of day hidden; slice timing and phase spacing preserved, which
+# dcm2niix needs for SliceTiming and the volume RepetitionTime of DCE). null = delete all times.
+relative_clock: "010000"   # small base: dcm2niix stores HHMMSS as float32, smaller values = finer precision
+relative_time_attributes: [AcquisitionTime, ContentTime]
+
+pseudonym_regex: '^[A-Za-z0-9_-]{1,64}$'
+age_bins: [18, 30, 40, 50, 60, 70, 80]       # -> <18, 18-30, 31-40, ..., 71-80, 81+
+
+# Series dropped entirely (matched on SeriesDescription/ProtocolName), e.g. series a site marks as
+# "do not send" or test acquisitions. Site-specific: fill in per extraction.
+exclude_series_regex: []
+
+# Series roles for the joint DCE timing scheme. First match wins (MIP/subtraction are detected from
+# ImageType before these rules). 'reference' = pre-contrast (native) acquisition that defines t=0.
+series_roles:
+  - {role: other,     regex: 'test|localizer|scout|survey|calibration|marker'}
+  - {role: reference, regex: 'native|pre[-_ ]?contrast|precontrast|\bpre\b'}
+  - {role: dynamic,   regex: 'dyn|dynamic|dce|vibrant|disco|twist|thrive|tricks|view'}
+
+# Extra values parsed from series names and stored in the private block (and series_timing.csv),
+# e.g. Siemens TWIST frames named '..._TTC=20.0s_...' (TTC: time to k-space centre within the run).
+series_name_tags:
+  - {name: TTC_s, regex: 'TTC=([\d.]+)s'}
+
+# Computed maps are never counted as DCE phases (they inherit the dynamic series name and carry the
+# time they were computed, not acquired).
+derived_imagetype_tokens: [TTP, PEI, WI, WASH_IN, WASH_OUT, MIP_T, MIPT, MAX_ENH, ADC, EADC, TRACEW,
+                           CALC_BVALUE, FA, PARAMETRIC_MAP, KTRANS]
+derived_name_regex: '_(TTP|PEI|WI|MIPt|WashIn|WashOut|ADC|TRACEW|CALC_BVAL)(_|$)'
+
+# Volumes starting within this many seconds share one temporal position (e.g. Dixon fat/water
+# images of the same frame); within a series, gaps larger than this start a new volume.
+timing_cluster_gap_s: 2.0

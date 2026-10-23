@@ -1,0 +1,65 @@
+<!--
+  RSNA CTP server pipeline for breast MRI de-identification (dicom-cloak allowlist policy).
+
+  Generate the script files first into CTP/scripts/ (DicomAnonymizer.script and
+  lookup-table.properties are secret: UID salt, original patient IDs; plus mr-filter.script) with
+      dicom-cloak-ctp script  (options: out = CTP/scripts, pseudonym-map, uid-key; see docs/CTP.md)
+  Start headless from the CTP folder:  java -jar Runner.jar start   (stop: java -jar Runner.jar stop)
+
+  This path has no Python pre/post-pass: Siemens protocol blobs (CSA series header, XA protocol) are
+  removed, all times of day are removed (no relative clock) and the joint DCE timing block is not
+  written. Use `dicom-cloak-ctp run` (batch) when those are needed. Run dicom-cloak-check on the
+  output folder (with the require-remapped-uids option) before release.
+
+  Quarantine folders receive ORIGINAL objects that failed (e.g. PatientID missing from the lookup
+  table): treat them like the source data and empty them after review.
+  Output names come only from de-identified values (pseudonym / remapped UIDs / SeriesNumber); never
+  put SeriesDescription or source file names into the structure.
+-->
+<Configuration>
+    <!-- CTP admin web UI: keep it on an internal port and do not publish it outside the host -->
+    <Server port="8080"/>
+    <Pipeline name="dicom-cloak breast MRI">
+        <!-- choose one import: DICOM network (C-STORE to port 1104) or a drop folder -->
+        <ImportService
+            name="DICOM Import"
+            class="org.rsna.ctp.stdstages.DicomImportService"
+            root="roots/dicom-import"
+            port="1104"
+            quarantine="quarantines/dicom-import"/>
+        <!--
+        <ImportService
+            name="Directory Import"
+            class="org.rsna.ctp.stdstages.DirectoryImportService"
+            root="roots/directory-import"
+            import="import"
+            minAge="10000"
+            quarantine="quarantines/directory-import"/>
+        -->
+        <!-- only MR / Enhanced MR objects go on (reports, presentation states, screenshots are dropped
+             into the quarantine). Needed: in a CTP pipeline an object the anonymizer skips would pass
+             on UNCHANGED, so non-image objects must never reach that decision. -->
+        <DicomFilter
+            name="MR image filter"
+            class="org.rsna.ctp.stdstages.DicomFilter"
+            root="roots/dicom-filter"
+            script="scripts/mr-filter.script"
+            quarantine="quarantines/dicom-filter"/>
+        <DicomAnonymizer
+            name="dicom-cloak allowlist anonymizer"
+            class="org.rsna.ctp.stdstages.DicomAnonymizer"
+            root="roots/dicom-anonymizer"
+            script="scripts/DicomAnonymizer.script"
+            lookupTable="scripts/lookup-table.properties"
+            quarantine="quarantines/dicom-anonymizer"/>
+        <StorageService
+            name="De-identified storage"
+            class="org.rsna.ctp.stdstages.DirectoryStorageService"
+            root="output"
+            structure="{PatientID}/{StudyInstanceUID}/{SeriesNumber}"
+            setStandardExtensions="yes"
+            acceptDuplicates="no"
+            returnStoredFile="no"
+            quarantine="quarantines/storage"/>
+    </Pipeline>
+</Configuration>

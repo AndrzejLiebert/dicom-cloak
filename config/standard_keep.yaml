@@ -1,0 +1,294 @@
+# ALLOWLIST mode (default): every standard attribute NOT listed here is removed, at every depth.
+#
+# - `keep`: attributes allowed wherever they occur (top level or inside an allowed sequence).
+# - `keep_sequences`: sequences that may stay; their items are filtered with the same lists.
+#   A sequence not listed is removed with everything inside it.
+# - Value rules still apply to kept attributes: DT -> year, UIDs -> remapped (2.25 HMAC), PN/DA/TM/AE
+#   never kept (none is listed; the engine refuses to keep those VRs even if added by mistake, except
+#   PatientName which is overwritten with the pseudonym).
+# - Kept free text (descriptions, protocol names, code meanings, private blobs) is still byte-checked
+#   against the study's original identifiers and scanned for national-ID numbers.
+# - Private tags: governed by vendor_private.yaml (also an allowlist).
+#
+# Changing this list: add a synthetic case + run tests/test_conversion.py (dcm2niix before/after).
+
+keep:
+  identity_and_deid:            # values written by the engine
+    - PatientName               # := pseudonym
+    - PatientID                 # := pseudonym
+    - PatientSex
+    - PatientIdentityRemoved
+    - DeidentificationMethod
+    - LongitudinalTemporalInformationModified
+    - ClinicalTrialTimePointID  # visit label (e.g. T0..T3); the free-text description is dropped
+  sop_and_uids:                 # instance UIDs are remapped
+    - SpecificCharacterSet
+    - SOPClassUID
+    - SOPInstanceUID
+    - StudyInstanceUID
+    - SeriesInstanceUID
+    - FrameOfReferenceUID
+    - ConcatenationUID
+    - SOPInstanceUIDOfConcatenationSource
+    - InConcatenationNumber
+    - InConcatenationTotalNumber
+    - ConcatenationFrameOffsetNumber
+    - ReferencedSOPClassUID
+    - ReferencedSOPInstanceUID
+    - ReferencedFrameNumber
+    - DimensionOrganizationUID
+  study_series_description:
+    - Modality
+    - Manufacturer
+    - ManufacturerModelName
+    - SoftwareVersions
+    - StudyDescription
+    - SeriesDescription
+    - ProtocolName
+    - BodyPartExamined
+    - Laterality
+    - ImageLaterality
+    - FrameLaterality
+    - SeriesNumber
+    - AcquisitionNumber
+    - InstanceNumber
+    - ImageType
+    - FrameType
+    - ContentQualification
+    - BurnedInAnnotation
+    - RecognizableVisualFeatures
+    - LossyImageCompression
+    - LossyImageCompressionRatio
+    - LossyImageCompressionMethod
+  timing:                       # DT -> year; seconds written by the engine
+    - AcquisitionDateTime
+    - AcquisitionTime           # relative clock (see config.yaml relative_clock), never the real time
+    - ContentTime               # relative clock
+    - FrameAcquisitionDateTime
+    - FrameReferenceDateTime
+    - FrameAcquisitionDuration
+    - AcquisitionDuration
+    - TriggerTime
+    - TemporalPositionIdentifier
+    - NumberOfTemporalPositions
+    - TemporalPositionIndex
+    - TemporalPositionTimeOffset
+    - TemporalResolution
+    - FrameAcquisitionNumber
+    - CardiacNumberOfImages
+    - ImagesInAcquisition
+  contrast:
+    - ContrastBolusAgent
+    - ContrastBolusRoute
+    - ContrastBolusVolume
+    - ContrastBolusTotalDose
+    - ContrastFlowRate
+    - ContrastFlowDuration
+    - ContrastBolusIngredient
+    - ContrastBolusIngredientConcentration
+    - ContrastBolusAgentNumber
+    - ContrastBolusAgentAdministered
+    - ContrastBolusAgentDetected
+    - ContrastBolusAgentPhase
+    - ContrastBolusUsageSequence
+  mr_acquisition:
+    - ScanningSequence
+    - SequenceVariant
+    - ScanOptions
+    - MRAcquisitionType
+    - SequenceName              # Siemens: carries the b-value when private headers are gone
+    - PulseSequenceName
+    - AngioFlag
+    - SliceThickness
+    - RepetitionTime
+    - EchoTime
+    - EffectiveEchoTime
+    - InversionTime
+    - InversionTimes
+    - NumberOfAverages
+    - ImagingFrequency
+    - ImagedNucleus
+    - ResonantNucleus
+    - EchoNumbers
+    - MagneticFieldStrength
+    - SpacingBetweenSlices
+    - NumberOfPhaseEncodingSteps
+    - EchoTrainLength
+    - PercentSampling
+    - PercentPhaseFieldOfView
+    - PixelBandwidth
+    - ReceiveCoilName
+    - TransmitCoilName
+    - AcquisitionMatrix
+    - InPlanePhaseEncodingDirection
+    - FlipAngle
+    - VariableFlipAngleFlag
+    - SAR
+    - dBdt
+    - B1rms
+    - SliceLocation
+    - ParallelReductionFactorInPlane
+    - ParallelReductionFactorOutOfPlane
+    - ParallelReductionFactorSecondInPlane
+    - ChemicalShiftReference
+    - ParallelAcquisition
+    - ParallelAcquisitionTechnique
+    - PartialFourier
+    - PartialFourierDirection
+    - AcquisitionContrast
+    - ComplexImageComponent
+    - PixelPresentation
+    - VolumetricProperties
+    - VolumeBasedCalculationTechnique
+    - EchoPulseSequence
+    - MultipleSpinEcho
+    - MultiPlanarExcitation
+    - PhaseContrast
+    - TimeOfFlightContrast
+    - Spoiling
+    - SteadyStatePulseSequence
+    - EchoPlanarPulseSequence
+    - MagnetizationTransfer
+    - T2Preparation
+    - BloodSignalNulling
+    - SaturationRecovery
+    - SpectrallySelectedSuppression
+    - SpectrallySelectedExcitation
+    - SpatialPresaturation
+    - Tagging
+    - OversamplingPhase
+    - GeometryOfKSpaceTraversal
+    - SegmentedKSpaceTraversal
+    - RectilinearPhaseEncodeReordering
+    - NumberOfKSpaceTrajectories
+    - CoverageOfKSpace
+    - FlowCompensation
+    - InversionRecovery
+    - ApplicableSafetyStandardAgency
+    - BeatRejectionFlag
+    - KSpaceFiltering
+    - TransmitterFrequency
+    - GradientEchoTrainLength
+    - RFEchoTrainLength
+    - GradientOutput
+    - GradientOutputType
+    - MRAcquisitionFrequencyEncodingSteps
+    - MRAcquisitionPhaseEncodingStepsInPlane
+    - MRAcquisitionPhaseEncodingStepsOutOfPlane
+    - InPlanePhaseEncodingDirection
+    - MRTransmitCoilSequence
+    - TransmitCoilType
+    - MRReceiveCoilSequence
+    - ReceiveCoilType
+    - QuadratureReceiveCoil
+  diffusion:
+    - DiffusionBValue
+    - DiffusionDirectionality
+    - DiffusionGradientOrientation
+    - DiffusionBValueXX
+    - DiffusionBValueXY
+    - DiffusionBValueXZ
+    - DiffusionBValueYY
+    - DiffusionBValueYZ
+    - DiffusionBValueZZ
+    - DiffusionAnisotropyType
+  geometry:
+    - PatientPosition
+    - PatientOrientation
+    - PositionReferenceIndicator
+    - ReconstructionDiameter
+    - SpatialLocationsPreserved
+    - ImagePositionPatient
+    - ImageOrientationPatient
+    - PixelSpacing
+    - StackID
+    - InStackPositionNumber
+    - DimensionIndexValues
+    - DimensionIndexPointer
+    - FunctionalGroupPointer
+    - DimensionDescriptionLabel
+    - DimensionIndexPrivateCreator   # names the private group a dimension pointer refers to (Philips enhanced)
+    - FunctionalGroupPrivateCreator
+  pixel_module:
+    - SamplesPerPixel
+    - PhotometricInterpretation
+    - Rows
+    - Columns
+    - NumberOfFrames
+    - BitsAllocated
+    - BitsStored
+    - HighBit
+    - PixelRepresentation
+    - PixelPaddingValue
+    - SmallestImagePixelValue
+    - LargestImagePixelValue
+    - PresentationLUTShape
+    - WindowCenter
+    - WindowWidth
+    - WindowCenterWidthExplanation
+    - VOILUTFunction
+    - RescaleIntercept
+    - RescaleSlope
+    - RescaleType
+    - RealWorldValueFirstValueMapped
+    - RealWorldValueLastValueMapped
+    - RealWorldValueIntercept
+    - RealWorldValueSlope
+    - LUTExplanation
+    - LUTLabel
+    - PixelData
+    - FloatPixelData
+    - DoubleFloatPixelData
+  code_items:                   # inside allowed code sequences only
+    - CodeValue
+    - CodingSchemeDesignator
+    - CodingSchemeVersion
+    - CodeMeaning
+    - LongCodeValue
+    - URNCodeValue
+    - MappingResource
+    - ContextIdentifier
+    - ContextUID
+    - ContextGroupVersion
+    - ContextGroupLocalVersion
+  deid_marker_items:
+    - DeidentificationMethodCodeSequence
+
+keep_sequences:
+  - SharedFunctionalGroupsSequence
+  - PerFrameFunctionalGroupsSequence
+  - PixelMeasuresSequence
+  - PlanePositionSequence
+  - PlaneOrientationSequence
+  - FrameContentSequence
+  - PixelValueTransformationSequence
+  - FrameVOILUTSequence
+  - RealWorldValueMappingSequence
+  - MeasurementUnitsCodeSequence
+  - MRImageFrameTypeSequence
+  - MRTimingAndRelatedParametersSequence
+  - MRFOVGeometrySequence
+  - MREchoSequence
+  - MRModifierSequence
+  - MRImagingModifierSequence
+  - MRAveragesSequence
+  - MRTransmitCoilSequence
+  - MRReceiveCoilSequence
+  - MRDiffusionSequence
+  - DiffusionGradientDirectionSequence
+  - DiffusionBMatrixSequence
+  - TemporalPositionSequence
+  - DimensionIndexSequence
+  - DimensionOrganizationSequence
+  - ContrastBolusUsageSequence
+  - ContrastBolusAgentSequence
+  - ContrastBolusAdministrationRouteSequence
+  - ContrastBolusIngredientCodeSequence
+  - FrameAnatomySequence
+  - AnatomicRegionSequence
+  - DerivationImageSequence     # links derived (e.g. subtraction) frames to their sources; UIDs remapped
+  - SourceImageSequence
+  - DerivationCodeSequence
+  - PurposeOfReferenceCodeSequence
+  - ReferencedImageSequence
+  - DeidentificationMethodCodeSequence
